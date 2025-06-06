@@ -1,710 +1,96 @@
-# My Open Publishing Space
+# Phishing Attack - Technical report
+Pietro Terribile
+06/06/2025  
 
-## Create, Share and Collaborate
+## Overview
+Simulated phishing attack using a fake login page (phishlet) to steal user's credentials and cookies to bypass 2FA for GitHub.
 
-![Photo of Mountain](images/mountain.jpg)
+## Technical Configuration
+- **Tools used**:
+  - Lookalike domain "security-git.it" registered via Register.it 
+  - Amazon Linux EC2 instance (AWS t2.micro)
+  - Evilginx2 MITM phishing framework
+  - Email campaign using Zoho Mail
 
-[Docsify](https://docsify.js.org/#/) can generate article, portfolio and documentation websites on the fly. Unlike Docusaurus, Hugo and many other Static Site Generators (SSG), it does not generate static html files. Instead, it smartly loads and parses your Markdown content files and displays them as a website.
 
-## Introduction
+- **Threat Model**:
+  - Attacker knows target's mail address and knows he has a GitHub profile      
+  
 
-**Markdown** is a system-independent markup language that is easier to learn and use than **HTML**.
+## Attack Flow
+1. Domain Registration and Configuration.
 
-![Figure 1: The Markdown Mark](images/markdown-red.png)
+I have registered via Register.it the lookalike domain "security-git.it". In the DNS  management panel of Register.it, I added all the necessary records:
+Main A record:
 
-Some of the key benefits are:
+security-git.it → points to the public IP of the AWS instance (e.g. 13.60.225.161).
 
-1. Markdown is simple to learn, with minimal extra characters, so it's also quicker to write content.
-2. Less chance of errors when writing in markdown.
-3. Produces valid XHTML output.
-4. Keeps the content and the visual display separate, so you cannot mess up the look of your site.
-5. Write in any text editor or Markdown application you like.
-6. Markdown is a joy to use!
+api.security-git.com → same IP (13.60.225.161).
 
-John Gruber[^1], the author of Markdown, puts it like this:
+github.security-git.it → same IP (13.60.225.161).
+These subdomain are proper of the phishlet itself as they will be used to present the fake GitHub login page.
+MX record:
+Configured to allow e-mails to be sent and received via the chosen service (Zoho SMTP), thus enabling the address noreply@security-git.it to send phishing e-mails.
 
-> The overriding design goal for Markdown’s formatting syntax is to make it as readable as possible. The idea is that a Markdown-formatted document should be publishable as-is, as plain text, without looking like it’s been marked up with tags or formatting instructions. While Markdown’s syntax has been influenced by several existing text-to-HTML filters, the single biggest source of inspiration for Markdown’s syntax is the format of plain text email.
-> -- <cite>John Gruber</cite>
+***** immagine dns rr *****
 
+2. Provisioning the AWS instance (Amazon Linux)
 
-Without further delay, let us go over the main elements of Markdown and what the resulting HTML looks like:
+I purchased a new EC2 instance on AWS, selecting Amazon Linux 2023 as the operating system.
+I assigned 'security-git.it' as the instance name to facilitate internal traceability.
+I chose the t2.micro type (included in the AWS Free Tier) to reduce costs while maintaining sufficient computing power for the phishing attack. Moreover, I downloaded the .pem file containing the keypair to authenticate through SSH to the service. I have modified the inbound rules of the Security Group for the cloud service, opening the following ports: 
+  - port 22 (SSH, TCP) - source IP 0.0.0.0/0
+  - port 80 (HTTP, TCP) - source IP 0.0.0.0/0
+  - port 443 (HTTPS, TCP) - source IP 0.0.0.0/0
+  - port 53 (DNS, TCP) - source IP 0.0.0.0/0
 
-### Headings
+The opening of these protocols allows both remote access to the machine (SSH) and the provision of web pages (HTTP/HTTPS), as well as possible DNS services.
+After that, i copied the public IPv4 (13.60.225.161) and placed it in the A records of the domain on Register.it, so that security-git.it and all subdomains would resolve to that address.
 
-Headings from `h1` through `h6` are constructed with a `#` for each level:
+3. Accessing and setting up the environment on the Amazon Linux machine - Connection via SSH
+From windows command prompt i used OpenSSH to connect to the service with the command
+`ssh -i C:\Users\terse\Downloads\keys.pem ec2-user@13.60.225.161`
+After accepting the server fingerprint, I found myself in the ec2-user prompt on the Amazon Linux instance. Since tools like Evilginx need Go for compilation, I have installed it
+ `sudo yum update -y`
+`sudo yum install golang -y`
+After that I was able to clone the git repository of the Evilginx framework and I downloaded in the `/phishlets` directory the raw for the github.yaml file from GitHub official repository.
 
-```markdown
-# h1 Heading
-## h2 Heading
-### h3 Heading
-#### h4 Heading
-##### h5 Heading
-###### h6 Heading
-```
+4. Configuration of Evilginx2 and generation of the phishing link
+After having prepared everything, I started Evilginx2 using the command `sudo ./bin/evilginx -p phishlets/` from evilginx2's directory:
 
-Renders to:
+***** inserire immagine schermata *****
 
-<h1> h1 Heading </h1>
-<h2>  h2 Heading </h2>
-<h3>  h3 Heading </h3>
-<h4>  h4 Heading </h4>
-<h5>  h5 Heading </h5>
-<h6>  h6 Heading </h6>
+Within the Evilginx2 interactive console I executed these commands:
+  -  `config domain security-git.it` : sets the main domain that will be used to serve phishlets and as the basis for TLS/DNS records.
+  -  `config ipv4 13.60.225.161` : communicates to Evilginx2 the IPv4 of the EC2 instance on which the proxy runs.
+  -  `phishlets hostname github security-git.it` : defines the specific domain name for the GitHub phishlet (i.e. github.security-git.it) and associates it with the phishlet called 'github'. Evilginx2 automatically generates internal routing and internal DNS resolution rules so that all requests to github.security-git.it are handled by this phishlet.
+  -  `phishlets enable github` : actually enables the 'github' phishlet (previously copied to the /evilginx2/phishlets/ folder).  Evilginx2 creates network listeners on port 80/443 linked to the GitHub phishing logic. In practice, the proxy starts responding to HTTPS requests directed to github.security-git.it by serving the fake GitHub login page.
+  -  `lures create github` : generates a lure associated to the GitHub phishlet. A unique ID is allocated for that lure, which we can then use to construct the final phishing URL.
+  - `lures get-url <ID>` : returns the complete phishing URL associated with that newly created lure. I.E : https://security-git.it/YPGJMnll
 
-HTML:
+6. Preparing and sending the phishing e-mail - Configuring the e-mail sender on Zoho Mail
 
-```html
-<h1>h1 Heading</h1>
-<h2>h2 Heading</h2>
-<h3>h3 Heading</h3>
-<h4>h4 Heading</h4>
-<h5>h5 Heading</h5>
-<h6>h6 Heading</h6>
-```
+I created an e-mail account on Zoho with an address: noreply@security-git.it
+Within Zoho and Register.it, I correctly configured the DNS MX and SPF/DKIM records to allow Zoho to send 'authenticated' e-mails in the name of security-git.it. This ensures that the e-mail is not marked as spam and that the sender is trustworthy.
+I composed an e-mail simulating an official security notice from GitHub, inviting the recipient to 'verify' or 'update' their credentials by clicking on the attached link, which is the phishing link. From the mail client I sent the e-mail (from noreply@security-git.it) to the target address.
+The e-mail, thanks to the correct settigns, was 'legitimate' and did not end up in the spam folder of target's mail service.
 
-### Comments
+**** inserire immaagine ****
 
-Comments should be HTML compatible
+Once target receives the mail and clicks on the phishing link, the browser sends the request to security-git.it/login, which resolves to IP 13.60.225.161 (my EC2 server acting like a MiTM/proxy), as if it was the real login page of GitHub.
+As soon as the target submits the credentials, Evilginx2 captures it in real time (username/password) and simultaneously forwards it to the GitHub servers to complete the authentication.
 
-```html
-<!--
-This is a comment
--->
-```
-Comment below should **NOT** be seen:
+Since many GitHub accounts have 2FA, after entering the credentials, the target is redirected to the 2FA code request.
+The target enters its 2FA code (SMS, Authenticator app, etc.) and, once again, Evilginx2 captures that value and forwards it to the real GitHub server, completing the target's 'legitimate' login on GitHub servers.
 
-<!--
-This is a comment
--->
+After authentication is complete, the target's browser receives the session cookies from GitHub.
 
-### Horizontal Rules
+As a reverse proxy, Evilginx2 copies all session cookie and stores them locally.
 
-The HTML `<hr>` element is for creating a "thematic break" between paragraph-level elements. In markdown, you can create a `<hr>` with any of the following:
+In this way, the attacker can read the session cookies by typing `sessions <ID>` on Evilginx2 shell: he can then reproduce the login state by updating his own browser cookies (e.g. via the Cookie-Editor extension), thus bypassing the 2FA and accessing the target's account without needing to know the user/pass or OTP code.
 
-* `___`: three consecutive underscores
-* `---`: three consecutive dashes
-* `***`: three consecutive asterisks
 
-renders to:
-
-___
-
----
-
-***
-
-
-### Body Copy
-
-Body copy written as normal, plain text will be wrapped with `<p></p>` tags in the rendered HTML.
-
-So this body copy:
-
-```markdown
-Lorem ipsum dolor sit amet, graecis denique ei vel, at duo primis mandamus. Et legere ocurreret pri, animal tacimates complectitur ad cum. Cu eum inermis inimicus efficiendi. Labore officiis his ex, soluta officiis concludaturque ei qui, vide sensibus vim ad.
-```
-renders to this HTML:
-
-```html
-<p>Lorem ipsum dolor sit amet, graecis denique ei vel, at duo primis mandamus. Et legere ocurreret pri, animal tacimates complectitur ad cum. Cu eum inermis inimicus efficiendi. Labore officiis his ex, soluta officiis concludaturque ei qui, vide sensibus vim ad.</p>
-```
-
-### Emphasis
-
-#### Bold
-For emphasizing a snippet of text with a heavier font-weight.
-
-The following snippet of text is **rendered as bold text**.
-
-```markdown
-**rendered as bold text**
-```
-renders to:
-
-**rendered as bold text**
-
-and this HTML
-
-```html
-<strong>rendered as bold text</strong>
-```
-
-#### Italics
-For emphasizing a snippet of text with italics.
-
-The following snippet of text is _rendered as italicized text_.
-
-```markdown
-_rendered as italicized text_
-```
-
-renders to:
-
-_rendered as italicized text_
-
-and this HTML:
-
-```html
-<em>rendered as italicized text</em>
-```
-
-
-#### strikethrough
-In GFM (GitHub flavored Markdown) you can do strikethroughs.
-
-```markdown
-~~Strike through this text.~~
-```
-Which renders to:
-
-~~Strike through this text.~~
-
-HTML:
-
-```html
-<del>Strike through this text.</del>
-```
-
-### Blockquotes
-For quoting blocks of content from another source within your document.
-
-Add `>` before any text you want to quote.
-
-```markdown
-> **Fusion Drive** combines a hard drive with a flash storage (solid-state drive) and presents it as a single logical volume with the space of both drives combined.
-```
-
-Renders to:
-
-> **Fusion Drive** combines a hard drive with a flash storage (solid-state drive) and presents it as a single logical volume with the space of both drives combined.
-
-and this HTML:
-
-```html
-<blockquote>
-  <p><strong>Fusion Drive</strong> combines a hard drive with a flash storage (solid-state drive) and presents it as a single logical volume with the space of both drives combined.</p>
-</blockquote>
-```
-
-Blockquotes can also be nested:
-
-```markdown
-> Donec massa lacus, ultricies a ullamcorper in, fermentum sed augue.
-Nunc augue augue, aliquam non hendrerit ac, commodo vel nisi.
->> Sed adipiscing elit vitae augue consectetur a gravida nunc vehicula. Donec auctor
-odio non est accumsan facilisis. Aliquam id turpis in dolor tincidunt mollis ac eu diam.
-```
-
-Renders to:
-
-> Donec massa lacus, ultricies a ullamcorper in, fermentum sed augue.
-Nunc augue augue, aliquam non hendrerit ac, commodo vel nisi.
->> Sed adipiscing elit vitae augue consectetur a gravida nunc vehicula. Donec auctor
-odio non est accumsan facilisis. Aliquam id turpis in dolor tincidunt mollis ac eu diam.
-
-### Lists
-
-#### Unordered
-A list of items in which the order of the items does not explicitly matter.
-
-You may use any of the following symbols to denote bullets for each list item:
-
-```markdown
-* valid bullet
-- valid bullet
-+ valid bullet
-```
-
-For example
-
-```markdown
-+ Lorem ipsum dolor sit amet
-+ Consectetur adipiscing elit
-+ Integer molestie lorem at massa
-+ Facilisis in pretium nisl aliquet
-+ Nulla volutpat aliquam velit
-  - Phasellus iaculis neque
-  - Purus sodales ultricies
-  - Vestibulum laoreet porttitor sem
-  - Ac tristique libero volutpat at
-+ Faucibus porta lacus fringilla vel
-+ Aenean sit amet erat nunc
-+ Eget porttitor lorem
-```
-Renders to:
-
-+ Lorem ipsum dolor sit amet
-+ Consectetur adipiscing elit
-+ Integer molestie lorem at massa
-+ Facilisis in pretium nisl aliquet
-+ Nulla volutpat aliquam velit
-  - Phasellus iaculis neque
-  - Purus sodales ultricies
-  - Vestibulum laoreet porttitor sem
-  - Ac tristique libero volutpat at
-+ Faucibus porta lacus fringilla vel
-+ Aenean sit amet erat nunc
-+ Eget porttitor lorem
-
-And this HTML
-
-```html
-<ul>
-  <li>Lorem ipsum dolor sit amet</li>
-  <li>Consectetur adipiscing elit</li>
-  <li>Integer molestie lorem at massa</li>
-  <li>Facilisis in pretium nisl aliquet</li>
-  <li>Nulla volutpat aliquam velit
-    <ul>
-      <li>Phasellus iaculis neque</li>
-      <li>Purus sodales ultricies</li>
-      <li>Vestibulum laoreet porttitor sem</li>
-      <li>Ac tristique libero volutpat at</li>
-    </ul>
-  </li>
-  <li>Faucibus porta lacus fringilla vel</li>
-  <li>Aenean sit amet erat nunc</li>
-  <li>Eget porttitor lorem</li>
-</ul>
-```
-
-#### Ordered
-
-A list of items in which the order of items does explicitly matter.
-
-```markdown
-1. Lorem ipsum dolor sit amet
-2. Consectetur adipiscing elit
-3. Integer molestie lorem at massa
-4. Facilisis in pretium nisl aliquet
-5. Nulla volutpat aliquam velit
-6. Faucibus porta lacus fringilla vel
-7. Aenean sit amet erat nunc
-8. Eget porttitor lorem
-```
-Renders to:
-
-1. Lorem ipsum dolor sit amet
-2. Consectetur adipiscing elit
-3. Integer molestie lorem at massa
-4. Facilisis in pretium nisl aliquet
-5. Nulla volutpat aliquam velit
-6. Faucibus porta lacus fringilla vel
-7. Aenean sit amet erat nunc
-8. Eget porttitor lorem
-
-And this HTML:
-
-```html
-<ol>
-  <li>Lorem ipsum dolor sit amet</li>
-  <li>Consectetur adipiscing elit</li>
-  <li>Integer molestie lorem at massa</li>
-  <li>Facilisis in pretium nisl aliquet</li>
-  <li>Nulla volutpat aliquam velit</li>
-  <li>Faucibus porta lacus fringilla vel</li>
-  <li>Aenean sit amet erat nunc</li>
-  <li>Eget porttitor lorem</li>
-</ol>
-```
-
-**TIP**: If you just use `1.` for each number, Markdown will automatically number each item. For example:
-
-```markdown
-1. Lorem ipsum dolor sit amet
-1. Consectetur adipiscing elit
-1. Integer molestie lorem at massa
-1. Facilisis in pretium nisl aliquet
-1. Nulla volutpat aliquam velit
-1. Faucibus porta lacus fringilla vel
-1. Aenean sit amet erat nunc
-1. Eget porttitor lorem
-```
-
-Renders to:
-
-1. Lorem ipsum dolor sit amet
-2. Consectetur adipiscing elit
-3. Integer molestie lorem at massa
-4. Facilisis in pretium nisl aliquet
-5. Nulla volutpat aliquam velit
-6. Faucibus porta lacus fringilla vel
-7. Aenean sit amet erat nunc
-8. Eget porttitor lorem
-
-### Code
-
-#### Inline code
-Wrap inline snippets of code with `` ` ``.
-
-```markdown
-In this example, `<section></section>` should be wrapped as **code**.
-```
-
-Renders to:
-
-In this example, `<section></section>` should be wrapped with **code**.
-
-HTML:
-
-```html
-<p>In this example, <code>&lt;section&gt;&lt;/section&gt;</code> should be wrapped with <strong>code</strong>.</p>
-```
-
-#### Indented code
-
-Or indent several lines of code by at least four spaces, as in:
-
-<pre>
-  // Some comments
-  line 1 of code
-  line 2 of code
-  line 3 of code
-</pre>
-
-Renders to:
-
-    // Some comments
-    line 1 of code
-    line 2 of code
-    line 3 of code
-
-HTML:
-
-```html
-<pre>
-  <code>
-    // Some comments
-    line 1 of code
-    line 2 of code
-    line 3 of code
-  </code>
-</pre>
-```
-
-
-#### Block code "fences"
-
-Use "fences"  ```` ``` ```` to block in multiple lines of code.
-
-<pre>
-``` markup
-Sample text here...
-```
-</pre>
-
-
-```
-Sample text here...
-```
-
-HTML:
-
-```html
-<pre>
-  <code>Sample text here...</code>
-</pre>
-```
-
-#### Syntax highlighting
-
-GFM, or "GitHub Flavored Markdown" also supports syntax highlighting. To activate it, simply add the file extension of the language you want to use directly after the first code "fence", ` ```js `, and syntax highlighting will automatically be applied in the rendered HTML. For example, to apply syntax highlighting to JavaScript code:
-
-<pre>
-```js
-grunt.initConfig({
-  assemble: {
-    options: {
-      assets: 'docs/assets',
-      data: 'src/data/*.{json,yml}',
-      helpers: 'src/custom-helpers.js',
-      partials: ['src/partials/**/*.{hbs,md}']
-    },
-    pages: {
-      options: {
-        layout: 'default.hbs'
-      },
-      files: {
-        './': ['src/templates/pages/index.hbs']
-      }
-    }
-  }
-};
-```
-</pre>
-
-Renders to:
-
-```js
-grunt.initConfig({
-  assemble: {
-    options: {
-      assets: 'docs/assets',
-      data: 'src/data/*.{json,yml}',
-      helpers: 'src/custom-helpers.js',
-      partials: ['src/partials/**/*.{hbs,md}']
-    },
-    pages: {
-      options: {
-        layout: 'default.hbs'
-      },
-      files: {
-        './': ['src/templates/pages/index.hbs']
-      }
-    }
-  }
-};
-```
-
-### Tables
-Tables are created by adding pipes as dividers between each cell, and by adding a line of dashes (also separated by bars) beneath the header. Note that the pipes do not need to be vertically aligned.
-
-
-```markdown
-| Option | Description |
-| ------ | ----------- |
-| data   | path to data files to supply the data that will be passed into templates. |
-| engine | engine to be used for processing templates. Handlebars is the default. |
-| ext    | extension to be used for dest files. |
-```
-
-Renders to:
-
-| Option | Description |
-| ------ | ----------- |
-| data   | path to data files to supply the data that will be passed into templates. |
-| engine | engine to be used for processing templates. Handlebars is the default. |
-| ext    | extension to be used for dest files. |
-
-And this HTML:
-
-```html
-<table>
-  <tr>
-    <th>Option</th>
-    <th>Description</th>
-  </tr>
-  <tr>
-    <td>data</td>
-    <td>path to data files to supply the data that will be passed into templates.</td>
-  </tr>
-  <tr>
-    <td>engine</td>
-    <td>engine to be used for processing templates. Handlebars is the default.</td>
-  </tr>
-  <tr>
-    <td>ext</td>
-    <td>extension to be used for dest files.</td>
-  </tr>
-</table>
-```
-
-### Right aligned text
-
-Adding a colon on the right side of the dashes below any heading will right align text for that column.
-
-```markdown
-| Option | Description |
-| ------:| -----------:|
-| data   | path to data files to supply the data that will be passed into templates. |
-| engine | engine to be used for processing templates. Handlebars is the default. |
-| ext    | extension to be used for dest files. |
-```
-
-| Option | Description |
-| ------:| -----------:|
-| data   | path to data files to supply the data that will be passed into templates. |
-| engine | engine to be used for processing templates. Handlebars is the default. |
-| ext    | extension to be used for dest files. |
-
-### Links
-
-#### Basic link
-
-```markdown
-[Assemble](http://assemble.io)
-```
-
-Renders to (hover over the link, there is no tooltip):
-
-[Assemble](http://assemble.io)
-
-HTML:
-
-```html
-<a href="http://assemble.io">Assemble</a>
-```
-
-
-#### Add a title
-
-```markdown
-[Upstage](https://github.com/upstage/ "Visit Upstage!")
-```
-
-Renders to (hover over the link, there should be a tooltip):
-
-[Upstage](https://github.com/upstage/ "Visit Upstage!")
-
-HTML:
-
-```html
-<a href="https://github.com/upstage/" title="Visit Upstage!">Upstage</a>
-```
-
-#### Named Anchors
-
-Named anchors enable you to jump to the specified anchor point on the same page. For example, each of these chapters:
-
-```markdown
-# Table of Contents
-  * [Chapter 1](#chapter-1)
-  * [Chapter 2](#chapter-2)
-  * [Chapter 3](#chapter-3)
-```
-will jump to these sections:
-
-```markdown
-### Chapter 1 <a id="chapter-1"></a>
-Content for chapter one.
-
-### Chapter 2 <a id="chapter-2"></a>
-Content for chapter one.
-
-### Chapter 3 <a id="chapter-3"></a>
-Content for chapter one.
-```
-**NOTE** that specific placement of the anchor tag seems to be arbitrary. They are placed inline here since it seems to be unobtrusive, and it works.
-
-### Images
-Images have a similar syntax to links but include a preceding exclamation point.
-
-```markdown
-![Image of Minion](https://octodex.github.com/images/minion.png)
-```
-![Image of Minion](https://octodex.github.com/images/minion.png)
-
-and using a local image (which also displays in GitHub):
-
-```markdown
-![Image of Octocat](images/octocat.jpg)
-```
-![Image of Octocat](images/octocat.jpg)
-
-## Topic One  
-
-Lorem markdownum in maior in corpore ingeniis: causa clivo est. Rogata Veneri terrebant habentem et oculos fornace primusque et pomaria et videri putri, levibus. Sati est novi tenens aut nitidum pars, spectabere favistis prima et capillis in candida spicis; sub tempora, aliquo.
-
-## Topic Two
-
-Lorem markdownum vides aram est sui istis excipis Danai elusaque manu fores.
-Illa hunc primo pinum pertulit conplevit portusque pace *tacuit* sincera. Iam
-tamen licentia exsulta patruelibus quam, deorum capit; vultu. Est *Philomela
-qua* sanguine fremit rigidos teneri cacumina anguis hospitio incidere sceptroque
-telum spectatorem at aequor.
-
-## Topic Three
-
-### Overview
-
-Lorem markdownum vides aram est sui istis excipis Danai elusaque manu fores.
-Illa hunc primo pinum pertulit conplevit portusque pace *tacuit* sincera. Iam
-tamen licentia exsulta patruelibus quam, deorum capit; vultu. Est *Philomela
-qua* sanguine fremit rigidos teneri cacumina anguis hospitio incidere sceptroque
-telum spectatorem at aequor.
-
-### Subtopic One
-
-Lorem markdownum murmure fidissime suumque. Nivea agris, duarum longaeque Ide
-rugis Bacchum patria tuus dea, sum Thyneius liquor, undique. **Nimium** nostri
-vidisset fluctibus **mansit** limite rigebant; enim satis exaudi attulit tot
-lanificae [indice](http://www.mozilla.org/) Tridentifer laesum. Movebo et fugit,
-limenque per ferre graves causa neque credi epulasque isque celebravit pisces.
-
-- Iasone filum nam rogat
-- Effugere modo esse
-- Comminus ecce nec manibus verba Persephonen taxo
-- Viribus Mater
-- Bello coeperunt viribus ultima fodiebant volentem spectat
-- Pallae tempora
-
-#### Fuit tela Caesareos tamen per balatum
-
-De obstruat, cautes captare Iovem dixit gloria barba statque. Purpureum quid
-puerum dolosae excute, debere prodest **ignes**, per Zanclen pedes! *Ipsa ea
-tepebat*, fiunt, Actoridaeque super perterrita pulverulenta. Quem ira gemit
-hastarum sucoque, idem invidet qui possim mactatur insidiosa recentis, **res
-te** totumque [Capysque](http://tumblr.com/)! Modo suos, cum parvo coniuge, iam
-sceleris inquit operatus, abundet **excipit has**.
-
-In locumque *perque* infelix hospite parente adducto aequora Ismarios,
-feritatis. Nomine amantem nexibus te *secum*, genitor est nervo! Putes
-similisque festumque. Dira custodia nec antro inornatos nota aris, ducere nam
-genero, virtus rite.
-
-- Citius chlamydis saepe colorem paludosa territaque amoris
-- Hippolytus interdum
-- Ego uterque tibi canis
-- Tamen arbore trepidosque
-
-#### Colit potiora ungues plumeus de glomerari num
-
-Conlapsa tamen innectens spes, in Tydides studio in puerili quod. Ab natis non
-**est aevi** esse riget agmenque nutrit fugacis.
-
-- Coortis vox Pylius namque herbosas tuae excedere
-- Tellus terribilem saetae Echinadas arbore digna
-- Erraverit lectusque teste fecerat
-
-Suoque descenderat illi; quaeritur ingens cum periclo quondam flaventibus onus
-caelum fecit bello naides ceciderunt cladis, enim. Sunt aliquis.
-
-### Subtopic Two
-
-Lorem *markdownum saxum et* telum revellere in victus vultus cogamque ut quoque
-spectat pestiferaque siquid me molibus, mihi. Terret hinc quem Phoebus? Modo se
-cunctatus sidera. Erat avidas tamen antiquam; ignes igne Pelates
-[morte](http://www.youtube.com/watch?v=MghiBW3r65M) non caecaque canam Ancaeo
-contingat militis concitus, ad!
-
-#### Et omnis blanda fetum ortum levatus altoque
-
-Totos utinamque nutricis. Lycaona cum non sine vocatur tellus campus insignia et
-absumere pennas Cythereiadasque pericula meritumque Martem longius ait moras
-aspiciunt fatorum. Famulumque volvitur vultu terrae ut querellas hosti deponere
-et dixit est; in pondus fonte desertum. Condidit moras, Carpathius viros, tuta
-metum aethera occuluit merito mente tenebrosa et videtur ut Amor et una
-sonantia. Fuit quoque victa et, dum ora rapinae nec ipsa avertere lata, profugum
-*hectora candidus*!
-
-#### Et hanc
-
-Quo sic duae oculorum indignos pater, vis non veni arma pericli! Ita illos
-nitidique! Ignavo tibi in perdam, est tu precantia fuerat
-[revelli](http://jaspervdj.be/).
-
-Non Tmolus concussit propter, et setae tum, quod arida, spectata agitur, ferax,
-super. Lucemque adempto, et At tulit navem blandas, et quid rex, inducere? Plebe
-plus *cum ignes nondum*, fata sum arcus lustraverat tantis!
-
-#### Adulterium tamen instantiaque puniceum et formae patitur
-
-Sit paene [iactantem suos](http://www.metafilter.com/) turbineo Dorylas heros,
-triumphos aquis pavit. Formatae res Aeolidae nomen. Nolet avum quique summa
-cacumine dei malum solus.
-
-1. Mansit post ambrosiae terras
-2. Est habet formidatis grandior promissa femur nympharum
-3. Maestae flumina
-4. Sit more Trinacris vitasset tergo domoque
-5. Anxia tota tria
-6. Est quo faece nostri in fretum gurgite
-
-Themis susurro tura collo: cunas setius *norat*, Calydon. Hyaenam terret credens
-habenas communia causas vocat fugamque roganti Eleis illa ipsa id est madentis
-loca: Ampyx si quis. Videri grates trifida letum talia pectus sequeretur erat
-ignescere eburno e decolor terga.
-
-> Note: Example page content from [GetGrav.org](https://learn.getgrav.org/17/content/markdown), included to demonstrate the portability of Markdown-based content
-
-[^1]: [Markdown - John Gruber](https://daringfireball.net/projects/markdown/)
+## Conclusions
+With this attack, after obtaining not only the victim's username and password, but also the session cookies needed to bypass the 2FA, the attacker could freely browse private repositories, download or delete code, create personal access tokens, and even send himself notifications or messages pretending to be the victim, all without being asked for a second authentication factor again. 
+## Mitigations
+To mitigate this type of risk, the user should first pay close attention to the URL and always check that the domain matches exactly the official one. The adoption of a 'phishing-resistant' two-factor authentication method (e.g. FIDO U2F/WebAuthn hardware keys) ensures that even when presenting a forged HTTPS certificate, the security device will refuse access. Furthermore, it is advisable to use unique passwords to avoid credential overlap and any other kind of credential stuffing attacks.
