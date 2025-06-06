@@ -28,11 +28,13 @@ security-git.it → points to the public IP of the AWS instance (e.g. 13.60.225.
 api.security-git.com → same IP (13.60.225.161).
 
 github.security-git.it → same IP (13.60.225.161).
+
 These subdomain are proper of the phishlet itself as they will be used to present the fake GitHub login page.
 MX record:
+
 Configured to allow e-mails to be sent and received via the chosen service (Zoho SMTP), thus enabling the address noreply@security-git.it to send phishing e-mails.
 
-***** immagine dns rr *****
+![DNS Records](images/dns_rr)
 
 2. Provisioning the AWS instance (Amazon Linux)
 
@@ -47,18 +49,23 @@ I chose the t2.micro type (included in the AWS Free Tier) to reduce costs while 
 The opening of these protocols allows both remote access to the machine (SSH) and the provision of web pages (HTTP/HTTPS), as well as possible DNS services.
 After that, i copied the public IPv4 (13.60.225.161) and placed it in the A records of the domain on Register.it, so that security-git.it and all subdomains would resolve to that address.
 
+![Cloud Service](images/aws)
+
 3. Accessing and setting up the environment on the Amazon Linux machine - Connection via SSH
+
 From windows command prompt i used OpenSSH to connect to the service with the command
 `ssh -i C:\Users\terse\Downloads\keys.pem ec2-user@13.60.225.161`
-After accepting the server fingerprint, I found myself in the ec2-user prompt on the Amazon Linux instance. Since tools like Evilginx need Go for compilation, I have installed it
+After accepting the server fingerprint, I found myself in the ec2-user prompt on the Amazon Linux instance. Since tools like Evilginx need Go for compilation, I have installed it with
  `sudo yum update -y`
-`sudo yum install golang -y`
-After that I was able to clone the git repository of the Evilginx framework and I downloaded in the `/phishlets` directory the raw for the github.yaml file from GitHub official repository.
+`sudo yum install golang -y`.
+
+After that I was had to clone the git repository of the Evilginx framework and I downloaded in the `/phishlets` directory the raw for the github.yaml file (the actual phishlet) from GitHub official repository.
 
 4. Configuration of Evilginx2 and generation of the phishing link
+
 After having prepared everything, I started Evilginx2 using the command `sudo ./bin/evilginx -p phishlets/` from evilginx2's directory:
 
-***** inserire immagine schermata *****
+![Evilginx2 console](images/evil_process1)
 
 Within the Evilginx2 interactive console I executed these commands:
   -  `config domain security-git.it` : sets the main domain that will be used to serve phishlets and as the basis for TLS/DNS records.
@@ -70,15 +77,22 @@ Within the Evilginx2 interactive console I executed these commands:
 
 6. Preparing and sending the phishing e-mail - Configuring the e-mail sender on Zoho Mail
 
-I created an e-mail account on Zoho with an address: noreply@security-git.it
+I created an e-mail account on Zoho with an address: noreply@security-git.it. 
+
 Within Zoho and Register.it, I correctly configured the DNS MX and SPF/DKIM records to allow Zoho to send 'authenticated' e-mails in the name of security-git.it. This ensures that the e-mail is not marked as spam and that the sender is trustworthy.
+
 I composed an e-mail simulating an official security notice from GitHub, inviting the recipient to 'verify' or 'update' their credentials by clicking on the attached link, which is the phishing link. From the mail client I sent the e-mail (from noreply@security-git.it) to the target address.
 The e-mail, thanks to the correct settigns, was 'legitimate' and did not end up in the spam folder of target's mail service.
 
-**** inserire immaagine ****
+![Phishing email](images/mail_phish)
 
 Once target receives the mail and clicks on the phishing link, the browser sends the request to security-git.it/login, which resolves to IP 13.60.225.161 (my EC2 server acting like a MiTM/proxy), as if it was the real login page of GitHub.
+
 As soon as the target submits the credentials, Evilginx2 captures it in real time (username/password) and simultaneously forwards it to the GitHub servers to complete the authentication.
+
+![Fake login page](images/fake_login)
+
+![Evilginx2 console](images/evil_process2)
 
 Since many GitHub accounts have 2FA, after entering the credentials, the target is redirected to the 2FA code request.
 The target enters its 2FA code (SMS, Authenticator app, etc.) and, once again, Evilginx2 captures that value and forwards it to the real GitHub server, completing the target's 'legitimate' login on GitHub servers.
@@ -89,6 +103,7 @@ As a reverse proxy, Evilginx2 copies all session cookie and stores them locally.
 
 In this way, the attacker can read the session cookies by typing `sessions <ID>` on Evilginx2 shell: he can then reproduce the login state by updating his own browser cookies (e.g. via the Cookie-Editor extension), thus bypassing the 2FA and accessing the target's account without needing to know the user/pass or OTP code.
 
+![Evilginx2 console](images/evil_process3.png)
 
 ## Conclusions
 With this attack, after obtaining not only the victim's username and password, but also the session cookies needed to bypass the 2FA, the attacker could freely browse private repositories, download or delete code, create personal access tokens, and even send himself notifications or messages pretending to be the victim, all without being asked for a second authentication factor again. 
