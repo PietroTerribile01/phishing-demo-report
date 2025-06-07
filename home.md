@@ -1,6 +1,4 @@
-# Phishing Attack - Technical report
-Pietro Terribile
-06/06/2025  
+# Email spoofing and phishing Attack - Technical report
 
 ## Overview
 Simulated phishing attack using a fake login page (phishlet) to steal user's credentials and cookies to bypass 2FA for GitHub.
