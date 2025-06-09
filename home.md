@@ -27,7 +27,7 @@ api.security-git.com → same IP (13.60.225.161).
 
 github.security-git.it → same IP (13.60.225.161).
 
-These subdomain are proper of the phishlet itself as they will be used to present the fake GitHub login page.
+These subdomains are proper of the phishlet itself as they will be used to present the fake GitHub login page.
 MX record:
 
 Configured to allow e-mails to be sent and received via the chosen service (Zoho SMTP), thus enabling the address noreply@security-git.it to send phishing e-mails.
@@ -45,19 +45,19 @@ I chose the t2.micro type (included in the AWS Free Tier) to reduce costs while 
   - port 53 (DNS, TCP) - source IP 0.0.0.0/0
 
 The opening of these protocols allows both remote access to the machine (SSH) and the provision of web pages (HTTP/HTTPS), as well as possible DNS services.
-After that, i copied the public IPv4 (13.60.225.161) and placed it in the A records of the domain on Register.it, so that security-git.it and all subdomains would resolve to that address.
+After that, I copied the public IPv4 (13.60.225.161) and placed it in the A records of the domain on Register.it, so that security-git.it and all subdomains would resolve to that address.
 
 ![Cloud Service](images/aws)
 
 3. Accessing and setting up the environment on the Amazon Linux machine - Connection via SSH
 
-From windows command prompt i used OpenSSH to connect to the service with the command
+From Windows Command Prompt I used OpenSSH to connect to the service with the command
 `ssh -i C:\Users\terse\Downloads\keys.pem ec2-user@13.60.225.161`
 After accepting the server fingerprint, I found myself in the ec2-user prompt on the Amazon Linux instance. Since tools like Evilginx need Go for compilation, I have installed it with
  `sudo yum update -y`
 `sudo yum install golang -y`.
 
-After that I was had to clone the git repository of the Evilginx framework and I downloaded in the `/phishlets` directory the raw for the github.yaml file (the actual phishlet) from GitHub official repository.
+After that I had to clone the git repository of the Evilginx framework and I downloaded in the `/phishlets` directory the raw for the github.yaml file (the actual phishlet) from GitHub official repository.
 
 4. Configuration of Evilginx2 and generation of the phishing link
 
@@ -77,10 +77,10 @@ Within the Evilginx2 interactive console I executed these commands:
 
 I created an e-mail account on Zoho with an address: noreply@security-git.it. 
 
-Within Zoho and Register.it, I correctly configured the DNS MX and SPF/DKIM records to allow Zoho to send 'authenticated' e-mails in the name of security-git.it. This ensures that the e-mail is not marked as spam and that the sender is trustworthy.
+Within Zoho and Register.it, I configured the DNS MX and SPF/DKIM records to allow Zoho to send 'authenticated' e-mails in the name of security-git.it. This ensures that the e-mail is not marked as spam and that the sender is trustworthy.
 
 I composed an e-mail simulating an official security notice from GitHub, inviting the recipient to 'verify' or 'update' their credentials by clicking on the attached link, which is the phishing link. From the mail client I sent the e-mail (from noreply@security-git.it) to the target address.
-The e-mail, thanks to the correct settigns, was 'legitimate' and did not end up in the spam folder of target's mail service.
+The e-mail was flagged as 'legitimate' and did not end up in the spam folder of target's mail service.
 
 ![Phishing email](images/mail_phish)
 
@@ -97,7 +97,7 @@ The target enters its 2FA code (SMS, Authenticator app, etc.) and, once again, E
 
 After authentication is complete, the target's browser receives the session cookies from GitHub.
 
-As a reverse proxy, Evilginx2 copies all session cookie and stores them locally.
+As a reverse proxy, Evilginx2 copies all session cookies and stores them locally.
 
 In this way, the attacker can read the session cookies by typing `sessions <ID>` on Evilginx2 shell: he can then reproduce the login state by updating his own browser cookies (e.g. via the Cookie-Editor extension), thus bypassing the 2FA and accessing the target's account without needing to know the user/pass or OTP code.
 
@@ -107,3 +107,17 @@ In this way, the attacker can read the session cookies by typing `sessions <ID>`
 With this attack, after obtaining not only the victim's username and password, but also the session cookies needed to bypass the 2FA, the attacker could freely browse private repositories, download or delete code, create personal access tokens, and even send himself notifications or messages pretending to be the victim, all without being asked for a second authentication factor again. 
 ## Mitigations
 To mitigate this type of risk, the user should first pay close attention to the URL and always check that the domain matches exactly the official one. The adoption of a 'phishing-resistant' two-factor authentication method (e.g. FIDO U2F/WebAuthn hardware keys) ensures that even when presenting a forged HTTPS certificate, the security device will refuse access. Furthermore, it is advisable to use unique passwords to avoid credential overlap and any other kind of credential stuffing attacks.
+
+## Bibliography
+  - Youtube: https://www.youtube.com/watch?v=sZ22YulJwao&t=1013s
+  - Youtube: https://youtu.be/nre4qiYWrdY?si=NF6lunERX0Tc9aTd
+  - Youtube: https://youtu.be/e7SebbYUS2w?si=YkJ1a_YLUesK5CAg
+  - Youtube: https://youtu.be/AsnaqTCA95o?si=XkKrnXWhGbWt3QuE
+  - Domain Email hosting setup: https://www.zoho.com/mail/help/adminconsole/email-hosting-setup.html
+  - Evilginx documentation: https://help.evilginx.com
+  - Evilginx documentation: https://breakdev.org/evilginx-2-1-the-first-post-release-update/
+  - LetsEncrypt documentation: https://letsencrypt.org/docs/challenge-types/#:~:text=This%20is%20the%20most%20common,If%20the
+  - C. Battaile, "Bypassing MFA: A Forensic Look at Evilginx2 Phishing Kit" : https://www.aon.com/cyber-solutions/aon_cyber_labs/bypassing-mfa-a-forensic-look-at-evilginx2-phishing-kit/#:~:text=activity%20–%20Evilginx2%20requests%20an,this%20page%20apart%20from%20a
+  - Domain configuration for Evilginx informations: https://github.com/kgretzky/evilginx2/wiki/FAQ
+  - Tool to check spf,dmarc,dkim of a domain: https://mxtoolbox.com/emailhealth/security-git.it/
+
