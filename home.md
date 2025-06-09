@@ -113,7 +113,7 @@ To mitigate this type of risk, the user should first pay close attention to the 
   - Youtube: https://youtu.be/nre4qiYWrdY?si=NF6lunERX0Tc9aTd
   - Youtube: https://youtu.be/e7SebbYUS2w?si=YkJ1a_YLUesK5CAg
   - Youtube: https://youtu.be/AsnaqTCA95o?si=XkKrnXWhGbWt3QuE
-  - Domain Email hosting setup: https://www.zoho.com/mail/help/adminconsole/email-hosting-setup.html
+  - Domain e-mail hosting setup: https://www.zoho.com/mail/help/adminconsole/email-hosting-setup.html
   - Evilginx documentation: https://help.evilginx.com
   - Evilginx documentation: https://breakdev.org/evilginx-2-1-the-first-post-release-update/
   - LetsEncrypt documentation: https://letsencrypt.org/docs/challenge-types/#:~:text=This%20is%20the%20most%20common,If%20the
