@@ -103,7 +103,7 @@ In this way, the attacker can read the session cookies by typing `sessions <ID>`
 
 ![Evilginx2 console](images/evil_process3.png)
 
-## Observation on Session Hijacking and 2FA Bypass Attempt
+## Observation on 2FA Bypass Attempt
 After a few days, the phishing attack stopped working as expected. Initially, the captured session cookies and 2FA tokens allowed to bypass GitHub's two-factor authentication (both SMS-based and via Authenticator App). However, repeating the same procedure now no longer grants access, even changing the browser utilized. The main issues are: 
   - The "_gh_sess" cookie, which is critical for maintaining an authenticated session, can no longer be modified or imported using common cookie managers.
   - Using some tools, like "Cookie-Editor", editing this cookie is completely blocked. Others, like "StorageAce" allow overwriting, but upon reloading the page, GitHub redirects to a "404 - Page not found" instead of granting account access. This behavior did not occur in earlier tests the week before.
